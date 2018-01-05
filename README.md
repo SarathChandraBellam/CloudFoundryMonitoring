@@ -15,11 +15,6 @@ CloudMonitoring tool sends eMail notifications using SMTP client. Emails are sen
 # Prerequisites to run the tool:
 * Chrome Browser
 
-# Download CloudMonitoring tool:
-|Version|Release Date| Download Link|
-|-------|-------|-------|
-|1.0|15/11/2017|[Click to Download](https://ge.box.com/shared/static/69lsot95a7xo6835aqqykz9jgew6gje8.zip)
-
 # Run CloudMonitoring tool:
 Download the tool & configure `cloudmonitoring_config.json` with your application details. Once you are done with finalizing the JSON file double click on `CloudMonitoringTool.exe` to start the CloudMonitoring tool.
 
