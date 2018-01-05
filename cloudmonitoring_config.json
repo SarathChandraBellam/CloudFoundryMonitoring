@@ -1,0 +1,41 @@
+{
+  "apiEndPoint": "https://api.system.aws-usw02-pr.ice.predix.io",
+  "ScheduleDurationInMinutes" : 4,
+  "userName": "username@techm.com",
+  "passkey": "Q2xvdWRNb25pdG9y",
+  "sendNotificationsTo": [502678186, 502129234],
+  "appMasterDetails": {
+    "useMasterKey": false,
+    "appUserName": "",
+    "appPasskey": ""
+  },
+  "appDetails": [
+    {
+      "isUserInterface":true,
+      "isCloudFoundry": true,
+      "appName": "CloudMonitor",
+      "appUrl": "",
+      "authEnabled": true,
+      "appUserName": "502678186",
+      "appPasskey": "Q2xvdWRNb25pdG9y"
+    },
+    {
+      "isUserInterface":false,
+      "isCloudFoundry": true,
+      "appName": "CloudMonitorService",
+      "appUrl": "",
+      "authEnabled": false,
+      "appUserName": "502678186",
+      "appPasskey": "Q2xvdWRNb25pdG9y="
+    },
+        {
+      "isUserInterface":true,
+      "isCloudFoundry": false,
+      "appName": "CloudMonitor",
+      "appUrl": "https://cloudmonitor.run.aws-usw02-pr.ice.predix.io",
+      "authEnabled": true,
+      "appUserName": "502678186",
+      "appPasskey": "Q2xvdWRNb25pdG9y"
+    }
+  ]
+}
