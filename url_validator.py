@@ -1,4 +1,8 @@
-from splinter import Browser
+from selenium import webdriver
+from selenium.webdriver import DesiredCapabilities
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 import os, sys
 import time
 import logging
@@ -8,36 +12,34 @@ from msvcrt import getch
 
 
 def validate_url(url_data):
+    logging.info("::::::::::::::::::::::::: Validating the url :::::::::::::::::::::::::")
     if urlparse(url_data['appUrl']).scheme != "https":
         url_data['appUrl'] = "https://" + url_data['appUrl']
     boolean_status = True
     if url_data['isUserInterface'] is True:
-        if requests.get(url_data['appUrl'], verify=False).status_code == 200:
-            browser = Browser('chrome', headless=True)
-            browser.visit(url_data['appUrl'])
+        try:
+            options = webdriver.ChromeOptions()
+            options.add_argument('headless')
+            options.add_argument('--ignore-certificate-errors')
+            options.add_argument('disable-gpu')
+            options.add_argument('window-size=1200,1100')
+            options.add_argument('log-level=3')
+            driver = webdriver.Chrome(executable_path='chromedriver.exe', options=options)
+            driver.get(url_data['appUrl'])
             if url_data['authEnabled'] is True:
-                try:
-                    logging.info("::::::::::::::::::::::::: Going to sleep for 30seconds :::::::::::::::::::::::::")
-                    time.sleep(30)
-                    logging.info("::::::::::::::::::::::::: Awake!! logging into application :::::::::::::::::::::::::")
-                    browser.find_by_id("username").fill(url_data['app_user'])
-                    browser.find_by_id("password").fill(url_data['app_key'])
-                    button = browser.find_by_id('submitFrm')
-                    button.click()
-                    if browser.status_code != 200:
-                        boolean_status = False
-                    else:
-                        boolean_status = True
-                except Exception as error_url:
-                    logging.info(error_url)
-                    boolean_status = False
-            else:
-                if browser.status_code != 200:
-                    boolean_status = False
-                else:
-                    boolean_status = True
-            #browser.quit()
-
+                logging.info("::::::::::::::::::::::::: logging into application :::::::::::::::::::::::::")
+                wait = WebDriverWait(driver, 20)
+                element_user = wait.until(EC.presence_of_element_located((By.ID, 'username')))
+                element_user.send_keys(url_data['app_user'])
+                element_password = driver.find_element_by_id('password')
+                element_password.send_keys(url_data['app_key'])
+                submit = driver.find_element_by_id('submitFrm')
+                submit.click()
+            driver.quit()
+            logging.info("::::::::::::::::::::::::: Success :::::::::::::::::::::::::")
+        except Exception as error_url:
+            logging.info(error_url)
+            boolean_status = False
     return boolean_status
 
 
@@ -56,7 +58,7 @@ def chrome_exe_download():
     if not os.path.isfile(chrome_file_path):
         logging.info('::::::::::::::::::::::::: Chrome driver plugin is not available, Downloading Chrome driver V2.33 :::::::::::::::::::::::::')
         logging.info(': Chrome download path::::' + chrome_file_path)
-        r = requests.get('https://chromedriver.storage.googleapis.com/2.33/chromedriver_win32.zip', verify=False)
+        r = requests.get('https://chromedriver.storage.googleapis.com/2.36/chromedriver_win32.zip', verify=False)
         z = zipfile.ZipFile(io.BytesIO(r.content))
         z.extractall(destination_directory)
     else:
