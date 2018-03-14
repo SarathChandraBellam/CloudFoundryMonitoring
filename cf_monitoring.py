@@ -30,24 +30,28 @@ warnings.simplefilter('ignore')
 HANDLERS = [logging.FileHandler('monitor.log', 'w'), logging.StreamHandler()]
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', handlers=HANDLERS)
 
+# Setting Proxies
+proxy_set = 'http://cis-india-pitc-bangalorez.proxy.corporate.ge.com:80'
+os.environ['http_proxy'] = proxy_set
+os.environ['HTTP_PROXY'] = proxy_set
+os.environ['https_proxy'] = proxy_set
+os.environ['HTTPS_PROXY'] = proxy_set
+
 
 def connect_to_cloud(endpoint_credentials):
     """
     Connect to cloud foundry target api using the credentials
     """
     client_cf = None
-    try:
 
-        logging.info(': Using API Endpoint: %s', endpoint_credentials[0])
-        proxy = {'http': 'http://cis-india-pitc-bangalorez.proxy.corporate.ge.com:80',
-                 'https': 'http://cis-india-pitc-bangalorez.proxy.corporate.ge.com:80'}
-        client_cf = CloudFoundryClient(target_endpoint=endpoint_credentials[0],
-                                       proxy=proxy, skip_verification=True)
-        client_cf.init_with_user_credentials(endpoint_credentials[1], endpoint_credentials[2])
-        logging.info(': %s user logged into CloudFoundry', endpoint_credentials[1])
-    except (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError, OAuthError) as error_x:
-        logging.info('In Except block of method cloud_connect:::: %s', error_x)
-        exit_program()
+
+    logging.info(': Using API Endpoint: %s', endpoint_credentials[0])
+    proxy = {'http': 'http://cis-india-pitc-bangalorez.proxy.corporate.ge.com:80',
+             'https': 'http://cis-india-pitc-bangalorez.proxy.corporate.ge.com:80'}
+    client_cf = CloudFoundryClient(target_endpoint=endpoint_credentials[0],
+                                   proxy=proxy, skip_verification=True)
+    client_cf.init_with_user_credentials(endpoint_credentials[1], endpoint_credentials[2])
+    logging.info(': %s user logged into CloudFoundry', endpoint_credentials[1])
     return client_cf
 
 
@@ -199,6 +203,7 @@ class Monitoring:
         application names are not matched with cloud application names.
         :return:
         """
+        aps_list = {}
         self.get_user_apps_info()
         app_count = len(self.user_input_apps)
         if app_count != 0:
@@ -207,6 +212,7 @@ class Monitoring:
             for guid in self.apps_in_cloud:
                 summary = self.client.apps.get_summary(guid)
                 application_name = summary['name']
+                aps_list[guid] = application_name
                 self.guid = guid
                 for each_app_name in self.user_input_apps:
                     if application_name == each_app_name['appName']:
@@ -233,18 +239,20 @@ class Monitoring:
             self.check_stats()
         elif self.app_info['Status'] == 'STOPPED':
             try:
+                self.app_info['Remarks'] = 'Application Stopped'
                 self.send_mail()
                 logging.info(': Application: %s :: is with Status: %s', self.app_info['ApplicationName'],
                              self.app_info['Status'])
                 logging.info(': Force Start Initiated by CloudMonitoring tool')
-                logging.info(': Application: %s :: is now with Status: %s after Force Start',
-                             self.app_info['ApplicationName'], self.app_info['Status'])
+
                 # Restarting the app
                 self.client.apps.start(self.guid)
-                self.send_mail()
                 summary_data = self.client.apps.get_summary(self.guid)
                 self.get_app_summary(summary_data)
+                logging.info(': Application: %s :: is now with Status: %s after Force Start',
+                             self.app_info['ApplicationName'], self.app_info['Status'])
                 self.app_info['Remarks'] = 'Application Restarted'
+                self.send_mail()
                 self.write_csv()
                 # summary_data = self.client.apps.get_summary(self.app_info['guid'])
                 # self.get_app_summary(summary_data)
@@ -254,8 +262,8 @@ class Monitoring:
                              self.app_info['ApplicationName'],
                              self.app_info['Status'], status_error)
                 # Unable to restart the application. Trigger a mail and writes to csv
-                self.send_mail()
                 self.app_info['Remarks'] = 'Failed to Start/restart the app.'
+                self.send_mail()
                 self.write_csv()
 
     def check_stats(self):
@@ -269,43 +277,45 @@ class Monitoring:
             state = stats['0']['stats']['state']
         except KeyError:
             state = stats['0']['state']
-        mode = True
+        # mode = True
         logging.info(': %s application current Status: %s, State: %s', self.app_info['ApplicationName'],
                      self.app_info['Status'], state)
-        while mode:
-            if state == 'RUNNING':
-                uri = "https://" + stats['0']['stats']['uris'][0]
-                self.url_data['appUrl'] = uri
-                logging.info(' :Checking the URL HTTP State for application %s', self.app_info['ApplicationName'])
-                # validating the url
-                url_boolean = validate_url(self.url_data)
-                if url_boolean is True:
-                    logging.info(': %s application URL is resolving', self.app_info['ApplicationName'])
-                else:
-                    logging.info(': URL isn\'t resolving for the application %s ', self.app_info['ApplicationName'])
-                    self.app_info['Remarks'] = 'Url is not resolving though the app is RUNNING state'
-                    self.write_csv()
-                    self.send_mail()
-                mode = False
+        if state == 'RUNNING':
+            uri = "https://" + stats['0']['stats']['uris'][0]
+            self.url_data['appUrl'] = uri
+            logging.info(' :Checking the URL HTTP State for application %s', self.app_info['ApplicationName'])
+            # validating the url
+            url_boolean = validate_url(self.url_data)
+            if url_boolean is True:
+                logging.info(': %s application URL is resolving', self.app_info['ApplicationName'])
             else:
-                try:
-                    self.send_mail()
-                    logging.info(': %s application is in STOPPED state, Initiating force START',
-                                 self.app_info['ApplicationName'])
-                    # restarting the down app
-                    self.client.apps.start(self.guid, timeout=10)
-                    # triggering a mail
-                    self.send_mail()
-                    summary_data = self.client.apps.get_summary(self.guid)
-                    self.get_app_summary(summary_data)
-                    self.check_summary()
-                except AssertionError as assert_error:
-                    logging.info(': Unable to start the application:%s, Error Code Read:%s',
-                                 self.app_info['ApplicationName'], assert_error)
-                    self.send_mail()
-                    self.app_info['Remarks'] = 'Application is in STOPPED State. FAILED to START the app.'
-                    self.write_csv()
-                    mode = False
+                logging.info(': URL isn\'t resolving for the application %s ', self.app_info['ApplicationName'])
+                self.app_info['Remarks'] = 'Url is not resolving though the app is RUNNING state'
+                self.write_csv()
+                self.send_mail()
+            # mode = False
+        else:
+            try:
+                self.app_info['Remarks'] = 'Application Stopped'
+                self.send_mail()
+                logging.info(': %s application is in STOPPED state, Initiating force START',
+                             self.app_info['ApplicationName'])
+                # restarting the down app
+                self.client.apps.start(self.guid, timeout=10)
+                summary_data = self.client.apps.get_summary(self.guid)
+                self.get_app_summary(summary_data)
+                self.app_info['Remarks'] = 'Application Restarted'
+                # triggering a mail
+                self.write_csv()
+                self.send_mail()
+                self.check_summary()
+            except AssertionError as assert_error:
+                logging.info(': Unable to start the application:%s, Error Code Read:%s',
+                             self.app_info['ApplicationName'], assert_error)
+                self.app_info['Remarks'] = 'Application is in STOPPED State. FAILED to START the app.'
+                self.send_mail()
+                self.write_csv()
+            # mode = False
 
     def get_app_summary(self, summary):
         """
@@ -359,11 +369,17 @@ class Monitoring:
         s = smtplib.SMTP('mail.ad.ge.com')
         s.sendmail('CloudMonitoringTool@mail.ad.ge.com', self.recipients, msg.as_string())
         logging.info(': eMail notifications sent to %s', self.recipients)
+        self.recipients = self.input_json_data[3]
         s.quit()
 
 
-def execute(config_data, cf_client_obj):
+def execute(config_data):
     try:
+        if config_data[1] is True:
+            cf_endpoint_and_credentials = config_data[2]
+            cf_client_obj = connect_to_cloud(cf_endpoint_and_credentials)
+        else:
+            cf_client_obj = None
         csv_file_path = Path("CloudMonitoring.csv")
         # As CSV acts as temporary date store, tool appends the data to CSV if it exists or create a new file to write.
         if csv_file_path.is_file():
@@ -382,13 +398,14 @@ def execute(config_data, cf_client_obj):
         monitor = Monitoring(json_data=config_data, csv_writer=csv_writer, cf_client=cf_client_obj)
         monitor.validate_apps()
         csv_file.close()
-    except(FileNotFoundError, KeyError, IndexError) as error_execute:
+    except(FileNotFoundError, KeyError, IndexError, ConnectionResetError,
+           ConnectionRefusedError, ConnectionAbortedError, OAuthError) as error_execute:
         logging.info('Error occurred in execute method %s', error_execute)
-        exit_program()
+        pass
 
 
 if __name__ == '__main__':
-    logging.info("::::::::::::::::::::::::: Build Version: 11.0 :::::::::::::::::::::::::")
+    logging.info("::::::::::::::::::::::::: Build Version: 12.0 :::::::::::::::::::::::::")
     logging.info("::::::::::::::::::::::::: Release Version: 1.1 :::::::::::::::::::::::::")
     logging.info("::::::::::::::::::::::::: Release Date: 17 / 11 / 2017 :::::::::::::::::::::::::")
     logging.info(
@@ -399,13 +416,9 @@ if __name__ == '__main__':
         logging.info('Error occurred while downloading the chrome.exe %s', os_error)
         exit_program()
     json_file_data = json_file_parser()
-    cf_endpoint_and_credentials = json_file_data[2]
-    if json_file_data[1] is True:
-        client = connect_to_cloud(cf_endpoint_and_credentials)
-    else:
-        client = None
-    execute(json_file_data, client)
-    schedule.every(json_file_data[0]).minutes.do(execute, json_file_data, client)
+
+    execute(json_file_data)
+    schedule.every(json_file_data[0]).minutes.do(execute, json_file_data)
     var_date = datetime.datetime.now()
     while True:
         idle_seconds = round(schedule.idle_seconds() / 60, 1)
